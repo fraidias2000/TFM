@@ -1,0 +1,10 @@
+{
+  "description": "HablaBar permite descubrir, crear y participar en chats temporales por proximidad, con controles de distancia, privacidad y caducidad para conversar con personas cercanas.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

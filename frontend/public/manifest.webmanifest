@@ -1,0 +1,14 @@
+{
+  "name": "HablaBar · Chats próximos",
+  "short_name": "HablaBar",
+  "description": "Conversaciones temporales con personas que están cerca.",
+  "lang": "es",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfcf8",
+  "theme_color": "#102d26",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
