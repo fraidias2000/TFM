@@ -20,7 +20,6 @@ Esqueleto inicial del backend de HablaBar. Se plantea como **monolito modular**:
 - `notifications`: avisos en tiempo real a usuarios conectados.
 - `shared`: configuración común, salud de servicio y errores transversales.
 
-El paquete principal es `es.hablabar`. Cada módulo contiene directamente sus controladores, servicios, repositorios, entidades y DTO cuando se implementen. Por ejemplo, `chats` contendrá `ChatController`, `ChatService`, `ChatRepository`, `Chat`, `CreateChatRequest` y `ChatResponse`, sin subcarpetas de capas. Un módulo debe acceder a otro mediante sus servicios públicos, evitando compartir repositorios entre módulos.
 
 ## Primer arranque
 
@@ -32,10 +31,10 @@ El paquete principal es `es.hablabar`. Cada módulo contiene directamente sus co
    docker compose up -d db
    ```
 
-4. Ejecuta el backend desde esta carpeta. Si ya tienes el wrapper del ZIP de Initializr:
+4. Ejecuta el backend desde esta carpeta:
 
    ```powershell
-   .\mvnw.cmd spring-boot:run
+   mvn spring-boot:run
    ```
 
    Si tienes Maven instalado:

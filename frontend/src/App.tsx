@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { AppShell } from "./components/AppShell"
 import { initialChats, locationForScenario } from "./data/mockData"
 import {
@@ -6,6 +6,14 @@ import {
   CHAT_LIFETIME,
   validateLocation,
 } from "./services/proximity"
+import { setUnauthorizedHandler } from "./services/api"
+import {
+  borrarSesion,
+  guardarSesion,
+  leerTokenGuardado,
+  obtenerPerfil,
+  type Session,
+} from "./services/auth"
 import { AuthScreen } from "./screens/AuthScreen"
 import { ChatScreen } from "./screens/ChatScreen"
 import { CreateScreen } from "./screens/CreateScreen"
@@ -15,6 +23,11 @@ import type { Chat, Scenario, Screen, User } from "./types"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  // Mientras se comprueba si hay una sesión guardada no se muestra el login.
+  const [checkingSession, setCheckingSession] = useState(
+    () => leerTokenGuardado() !== null,
+  )
   const [screen, setScreen] = useState<Screen>("nearby")
   const [scenario, setScenario] = useState<Scenario>("50m")
   const [scenarioOpen, setScenarioOpen] = useState(false)
@@ -28,6 +41,49 @@ export default function App() {
     [scenario, locationVersion],
   )
   const activeChat = chats.find((chat) => chat.id === activeChatId)
+  
+  const logout = useCallback(() => {
+    borrarSesion()
+    setToken(null)
+    setUser(null)
+    setScreen("nearby")
+    setActiveChatId(null)
+    setNotice("")
+  }, [])
+
+  function startSession(session: Session) {
+    guardarSesion(session)
+    setToken(session.token)
+    setUser(session.user)
+  }
+
+  // Si una petición autenticada recibe 401 (token caducado), se cierra la sesión.
+  useEffect(() => {
+    setUnauthorizedHandler(logout)
+    return () => setUnauthorizedHandler(null)
+  }, [logout])
+
+  // Al abrir la app, recupera la sesión guardada y comprueba que el token sigue siendo válido.
+  useEffect(() => {
+    const stored = leerTokenGuardado()
+    if (!stored) return
+    let cancelled = false
+    obtenerPerfil(stored.token)
+      .then((perfil) => {
+        if (cancelled) return
+        setToken(stored.token)
+        setUser(perfil)
+      })
+      .catch(() => {
+        if (!cancelled) borrarSesion()
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingSession(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function navigate(next: Screen) {
     setScreen(next)
@@ -128,7 +184,15 @@ export default function App() {
     )
   }
 
-  if (!user) return <AuthScreen onAuthenticate={setUser} />
+    if (checkingSession) {
+    return (
+      <main className="session-loading" aria-busy="true">
+        <span>Comprobando sesión…</span>
+      </main>
+    )
+  }
+
+  if (!user || !token) return <AuthScreen onAuthenticate={startSession} />
 
   return (
     <AppShell
@@ -178,10 +242,7 @@ export default function App() {
         <SettingsScreen
           user={user}
           onAliasChange={(alias) => setUser({ ...user, alias })}
-          onLogout={() => {
-            setUser(null)
-            setScreen("nearby")
-          }}
+            onLogout={logout}
         />
       )}
     </AppShell>

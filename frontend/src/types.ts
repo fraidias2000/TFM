@@ -31,8 +31,10 @@ export interface Chat {
 }
 
 export interface User {
+  id: string
   alias: string
   email: string
+  avisosActivados: boolean
 }
 
 export interface AppNotice {

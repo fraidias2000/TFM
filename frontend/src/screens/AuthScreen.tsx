@@ -1,23 +1,62 @@
 import { useState, type FormEvent } from "react"
 import { Icon } from "../components/Icon"
-import type { User } from "../types"
+import { ApiError } from "../services/api"
+import { iniciarSesion, registrar, type Session } from "../services/auth"
 
 interface Props {
-  onAuthenticate: (user: User) => void
+  onAuthenticate: (session: Session) => void
 }
+
+type Field = "alias" | "correo" | "password"
 
 export function AuthScreen({ onAuthenticate }: Props) {
   const [mode, setMode] = useState<"login" | "register">("register")
   const [alias, setAlias] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<Field, string>>>({})
 
-  function submit(event: FormEvent) {
+  function changeMode(next: "login" | "register") {
+    setMode(next)
+    setError("")
+    setFieldErrors({})
+  }
+
+  function clearFieldError(field: Field) {
+    setError("")
+    setFieldErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  async function submit(event: FormEvent) {
     event.preventDefault()
-    onAuthenticate({
-      alias: alias.trim() || "Ari",
-      email: email.trim() || "demo@hablabar.app",
-    })
+    if (loading) return
+    setLoading(true)
+    setError("")
+    setFieldErrors({})
+    try {
+      const session =
+        mode === "register"
+          ? await registrar(alias.trim(), email.trim(), password)
+          : await iniciarSesion(email.trim(), password)
+      onAuthenticate(session)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const detalles = err.detalles as Partial<Record<Field, string>>
+        if (Object.keys(detalles).length > 0) {
+          setFieldErrors(detalles)
+        } else if (err.codigo === "CORREO_REGISTRADO") {
+          setFieldErrors({ correo: err.message })
+        } else {
+          setError(err.message)
+        }
+      } else {
+        setError("Ha ocurrido un error inesperado. Inténtalo de nuevo.")
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -66,64 +105,104 @@ export function AuthScreen({ onAuthenticate }: Props) {
         <div className="auth-tabs" role="tablist">
           <button
             className={mode === "register" ? "is-active" : ""}
-            onClick={() => setMode("register")}
+            type="button"
+            onClick={() => changeMode("register")}
           >
             Registrarme
           </button>
           <button
             className={mode === "login" ? "is-active" : ""}
-            onClick={() => setMode("login")}
+            type="button"
+            onClick={() => changeMode("login")}
           >
             Iniciar sesión
           </button>
         </div>
 
         <form onSubmit={submit} className="auth-form">
-          <label>
-            <span>Alias visible</span>
-            <div className="input-wrap">
-              <Icon name="user" size={19} />
-              <input
-                value={alias}
-                onChange={(event) => setAlias(event.target.value)}
-                placeholder="Por ejemplo, Ari"
-                maxLength={24}
-                required
-              />
-            </div>
-            <small>Este nombre será visible para otros participantes.</small>
-          </label>
+          {mode === "register" && (
+            <label>
+              <span>Alias visible</span>
+              <div className={`input-wrap ${fieldErrors.alias ? "has-error" : ""}`}>
+                <Icon name="user" size={19} />
+                <input
+                  value={alias}
+                  onChange={(event) => {
+                    setAlias(event.target.value)
+                    clearFieldError("alias")
+                  }}
+                  placeholder="Por ejemplo, Ari"
+                  autoComplete="nickname"
+                  maxLength={24}
+                  required
+                />
+              </div>
+              {fieldErrors.alias ? (
+                <small className="field-error">{fieldErrors.alias}</small>
+              ) : (
+                <small>Este nombre será visible para otros participantes.</small>
+              )}
+            </label>
+          )}
           <label>
             <span>Correo electrónico</span>
-            <div className="input-wrap">
+            <div className={`input-wrap ${fieldErrors.correo ? "has-error" : ""}`}>
               <Icon name="message" size={19} />
               <input
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  clearFieldError("correo")
+                }}
                 placeholder="tu@correo.com"
+                autoComplete="email"
+                maxLength={254}
                 required
               />
             </div>
+            {fieldErrors.correo && (
+              <small className="field-error">{fieldErrors.correo}</small>
+            )}
           </label>
           <label>
             <span>Contraseña</span>
-            <div className="input-wrap">
+            <div className={`input-wrap ${fieldErrors.password ? "has-error" : ""}`}>
               <Icon name="lock" size={19} />
               <input
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  clearFieldError("password")
+                }}
                 placeholder="8 caracteres como mínimo"
-                minLength={8}
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
+                minLength={mode === "register" ? 8 : undefined}
+                maxLength={64}
                 required
               />
               <Icon name="eye" size={19} />
             </div>
+            {fieldErrors.password && (
+              <small className="field-error">{fieldErrors.password}</small>
+            )}
           </label>
-          <button className="primary-button" type="submit">
-            {mode === "register" ? "Crear cuenta" : "Entrar"}
-            <Icon name="arrow" className="arrow-forward" />
+          {error && (
+            <div className="inline-alert" role="alert">
+              <Icon name="lock" size={19} />
+              <span>{error}</span>
+            </div>
+          )}
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading
+              ? mode === "register"
+                ? "Creando cuenta…"
+                : "Entrando…"
+              : mode === "register"
+                ? "Crear cuenta"
+                : "Entrar"}
+            {!loading && <Icon name="arrow" className="arrow-forward" />}
           </button>
         </form>
 
