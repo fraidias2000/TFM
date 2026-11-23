@@ -1,0 +1,44 @@
+# =====================================================================
+# HablaBar - archivos que no deben guardarse en el repositorio
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Frontend (Node / Vite)
+# ---------------------------------------------------------------------
+# Dependencias: se reinstalan con "npm install" a partir de package.json
+node_modules/
+# Resultado de "npm run build"
+dist/
+# Variables de entorno locales (solo se versionan los .env.example)
+.env.local
+.env.*.local
+# Carpetas temporales generadas por las herramientas de Figma Make.
+# OJO: .figma/ NO se ignora, porque vite.config.ts importa .figma/make/site.json
+frontend/.tmp/
+frontend/.figaro/
+# Registros de npm / pnpm
+npm-debug.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------
+# Backend (Java / Maven)
+# ---------------------------------------------------------------------
+# Clases compiladas, informes de tests y .jar generados por Maven
+target/
+# Variables de entorno con secretos (solo se versiona .env.example)
+.env
+
+# ---------------------------------------------------------------------
+# IDE y sistema operativo
+# ---------------------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------
+# Registros
+# ---------------------------------------------------------------------
+*.log
