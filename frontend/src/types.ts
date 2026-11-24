@@ -23,6 +23,18 @@ export interface Chat {
   createdByMe: boolean
 }
 
+/** Aviso de un nuevo chat cercano recibido en tiempo real (RF-06). */
+export interface Aviso {
+  chatId: string
+  title: string
+  topic: string | null
+  /** Tramo de distancia (menos de 25, 50 o 100 m). */
+  distanceBand: number
+  participantCount: number
+  capacity: number
+  expiresAt: number
+}
+
 /** Participante visible dentro de un chat: solo su alias (RF-09). */
 export interface Participant {
   id: string

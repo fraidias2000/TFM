@@ -77,6 +77,19 @@ export async function obtenerPerfil(token: string): Promise<User> {
   return toUser(usuario)
 }
 
+/** Cambia el alias o la preferencia de avisos (PATCH /usuarios/me, RF-15). */
+export async function actualizarPerfil(
+  token: string,
+  cambios: { alias?: string, avisosActivados?: boolean },
+): Promise<User> {
+  const usuario = await apiFetch<UsuarioResponse>("/usuarios/me", {
+    method: "PATCH",
+    body: cambios,
+    token,
+  })
+  return toUser(usuario)
+}
+
 // ------------------------------------------------------------ Almacenamiento
 
 export function guardarSesion(session: Session) {

@@ -1,10 +1,12 @@
 import { useState } from "react"
 import { Icon } from "../components/Icon"
+import { pedirPermisoNotificaciones } from "../services/avisos"
 import type { User } from "../types"
 
 interface Props {
   user: User
-  onAliasChange: (alias: string) => void
+  /** Guarda los cambios en el servidor; lanza un error si no se aceptan. */
+  onProfileChange: (cambios: { alias?: string, avisosActivados?: boolean }) => Promise<void>
   onLogout: () => void
 }
 
@@ -12,10 +14,12 @@ function Toggle({
   checked,
   onChange,
   label,
+  disabled,
 }: {
   checked: boolean
   onChange: () => void
   label: string
+  disabled?: boolean
 }) {
   return (
     <button
@@ -24,18 +28,62 @@ function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={onChange}
+      disabled={disabled}
     >
       <span />
     </button>
   )
 }
 
-export function SettingsScreen({ user, onAliasChange, onLogout }: Props) {
-  const [nearby, setNearby] = useState(true)
-  const [messages, setMessages] = useState(true)
-  const [expiring, setExpiring] = useState(false)
+function estadoPermiso(): NotificationPermission | "no-disponible" {
+  return typeof Notification === "undefined" ? "no-disponible" : Notification.permission
+}
+
+const TEXTO_PERMISO: Record<NotificationPermission | "no-disponible", string> = {
+  granted: "Permitidas: recibirás el aviso aunque la pestaña esté en segundo plano",
+  denied: "Bloqueadas en el navegador. Puedes permitirlas en la configuración del sitio",
+  default: "Aún no se han permitido",
+  "no-disponible": "Este navegador no las admite",
+}
+
+export function SettingsScreen({ user, onProfileChange, onLogout }: Props) {
   const [editing, setEditing] = useState(false)
   const [alias, setAlias] = useState(user.alias)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [permiso, setPermiso] = useState(estadoPermiso)
+
+  async function guardar(cambios: { alias?: string, avisosActivados?: boolean }) {
+    setSaving(true)
+    setError("")
+    try {
+      await onProfileChange(cambios)
+      return true
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se han podido guardar los cambios.")
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function guardarAlias() {
+    const nuevo = alias.trim()
+    if (!nuevo || nuevo === user.alias) {
+      setAlias(user.alias)
+      setEditing(false)
+      return
+    }
+    if (await guardar({ alias: nuevo })) setEditing(false)
+  }
+
+  async function cambiarAvisos() {
+    const activar = !user.avisosActivados
+    // Al activar los avisos se pide también el permiso del navegador, que es
+    // independiente de la preferencia guardada en el servidor (RF-15).
+    if (activar) setPermiso(await pedirPermisoNotificaciones())
+    await guardar({ avisosActivados: activar })
+  }
 
   return (
     <div className="page settings-page">
@@ -55,15 +103,14 @@ export function SettingsScreen({ user, onAliasChange, onLogout }: Props) {
             <div className="alias-editor">
               <input
                 value={alias}
-                maxLength={24}
+                maxLength={50}
                 onChange={(event) => setAlias(event.target.value)}
                 autoFocus
               />
               <button
-                onClick={() => {
-                  onAliasChange(alias.trim() || user.alias)
-                  setEditing(false)
-                }}
+                onClick={() => void guardarAlias()}
+                disabled={saving}
+                aria-label="Guardar alias"
               >
                 <Icon name="check" />
               </button>
@@ -79,6 +126,13 @@ export function SettingsScreen({ user, onAliasChange, onLogout }: Props) {
         </div>
       </section>
 
+      {error && (
+        <div className="inline-alert" role="alert">
+          <Icon name="signal" size={19} />
+          <span>{error}</span>
+        </div>
+      )}
+
       <section className="settings-section">
         <div className="settings-heading">
           <span>
@@ -86,42 +140,35 @@ export function SettingsScreen({ user, onAliasChange, onLogout }: Props) {
           </span>
           <div>
             <h2>Notificaciones</h2>
-            <p>Simuladas solo en este prototipo</p>
+            <p>Llegan mientras la aplicación está abierta</p>
           </div>
         </div>
         <div className="settings-list">
           <div>
             <span>
               <strong>Nuevos chats cercanos</strong>
-              <small>Cuando aparece uno en un radio de 100 m</small>
+              <small>Cuando alguien crea uno a menos de 100 m</small>
             </span>
             <Toggle
-              checked={nearby}
-              onChange={() => setNearby(!nearby)}
+              checked={user.avisosActivados}
+              onChange={() => void cambiarAvisos()}
               label="Nuevos chats cercanos"
+              disabled={saving}
             />
           </div>
           <div>
             <span>
-              <strong>Mensajes nuevos</strong>
-              <small>De conversaciones en las que participas</small>
+              <strong>Notificaciones del navegador</strong>
+              <small>{TEXTO_PERMISO[permiso]}</small>
             </span>
-            <Toggle
-              checked={messages}
-              onChange={() => setMessages(!messages)}
-              label="Mensajes nuevos"
-            />
-          </div>
-          <div>
-            <span>
-              <strong>Chat a punto de caducar</strong>
-              <small>Un aviso 10 minutos antes</small>
-            </span>
-            <Toggle
-              checked={expiring}
-              onChange={() => setExpiring(!expiring)}
-              label="Chat a punto de caducar"
-            />
+            {permiso === "default" && (
+              <button
+                className="text-button"
+                onClick={() => void pedirPermisoNotificaciones().then(setPermiso)}
+              >
+                Permitir
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -143,7 +190,7 @@ export function SettingsScreen({ user, onAliasChange, onLogout }: Props) {
         <Icon name="logout" /> Cerrar sesión
       </button>
       <p className="version">
-        Prototipo local · Los datos se guardan solo en memoria
+        Prototipo · Tu ubicación solo se conserva 30 segundos en el servidor
       </p>
     </div>
   )

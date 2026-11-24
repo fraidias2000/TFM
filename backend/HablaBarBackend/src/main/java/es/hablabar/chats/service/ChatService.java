@@ -6,6 +6,7 @@ import es.hablabar.chats.dto.CrearChatRequest;
 import es.hablabar.chats.dto.ParticipanteResponse;
 import es.hablabar.chats.entity.Chat;
 import es.hablabar.chats.exception.ChatException;
+import es.hablabar.chats.model.ChatCreado;
 import es.hablabar.chats.repository.ChatRepository;
 import es.hablabar.location.model.UbicacionReciente;
 import es.hablabar.location.service.DistanciaService;
@@ -22,6 +23,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +48,7 @@ public class ChatService {
     private final UbicacionService ubicacionService;
     private final DistanciaService distanciaService;
     private final UsuarioService usuarioService;
+    private final ApplicationEventPublisher eventos;
     private final Clock clock;
 
     public ChatService(
@@ -54,18 +57,21 @@ public class ChatService {
             UbicacionService ubicacionService,
             DistanciaService distanciaService,
             UsuarioService usuarioService,
+            ApplicationEventPublisher eventos,
             Clock clock) {
         this.chatRepository = chatRepository;
         this.participacionService = participacionService;
         this.ubicacionService = ubicacionService;
         this.distanciaService = distanciaService;
         this.usuarioService = usuarioService;
+        this.eventos = eventos;
         this.clock = clock;
     }
 
     /**
      * RF-04: crea un chat en la ubicación actual del usuario (RN-03, RN-04) con
-     * caducidad a una hora (RN-06). El creador queda incorporado como participante.
+     * caducidad a una hora (RN-06). El creador queda incorporado como participante
+     * y se publica el evento ChatCreado para avisar a los usuarios cercanos (RF-06).
      */
     @Transactional
     public ChatResponse crear(UUID usuarioId, CrearChatRequest request) {
@@ -81,6 +87,17 @@ public class ChatService {
                 ahora));
         Participacion participacion =
                 participacionService.registrarEntrada(usuarioId, chat.getId(), chat.getFechaCreacion());
+
+        // RF-06: el módulo de avisos notifica a los usuarios cercanos al confirmar la transacción.
+        eventos.publishEvent(new ChatCreado(
+                chat.getId(),
+                usuarioId,
+                chat.getNombre(),
+                chat.getTema(),
+                chat.getLatitudOrigen(),
+                chat.getLongitudOrigen(),
+                chat.getCapacidadMaxima(),
+                chat.getFechaCaducidad()));
 
         return respuesta(chat, usuarioId, 1, participacion);
     }

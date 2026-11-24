@@ -6,6 +6,7 @@ import es.hablabar.location.model.UbicacionReciente;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -80,6 +81,22 @@ public class UbicacionService {
      */
     public UbicacionReciente exigirValida(UUID usuarioId) {
         return obtenerValida(usuarioId).orElseThrow(UbicacionNoValidaException::noDisponible);
+    }
+
+    /**
+     * Ubicaciones todavía válidas de todos los usuarios, indexadas por usuario.
+     * La usa el módulo de avisos para seleccionar los destinatarios de un nuevo
+     * chat (RN-08). Devuelve una copia: no permite modificar las ubicaciones.
+     */
+    public Map<UUID, UbicacionReciente> validas() {
+        Instant ahora = clock.instant();
+        Map<UUID, UbicacionReciente> resultado = new HashMap<>();
+        ubicaciones.forEach((usuarioId, ubicacion) -> {
+            if (ubicacion.esValidaEn(ahora)) {
+                resultado.put(usuarioId, ubicacion);
+            }
+        });
+        return resultado;
     }
 
     /** Olvida la ubicación del usuario, por ejemplo al cerrar sesión. */

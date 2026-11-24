@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AppShell } from "./components/AppShell"
+import { AvisoToast } from "./components/AvisoToast"
 import { useUbicacion } from "./hooks/useUbicacion"
 import { ApiError, setUnauthorizedHandler } from "./services/api"
 import {
+  actualizarPerfil,
   borrarSesion,
   guardarSesion,
   leerTokenGuardado,
   obtenerPerfil,
   type Session,
 } from "./services/auth"
+import { aAviso, chatDesdeAviso, notificarEnSistema } from "./services/avisos"
 import {
   chatsCercanos,
   chatsParticipando,
@@ -38,6 +41,7 @@ import { CreateScreen } from "./screens/CreateScreen"
 import { NearbyScreen } from "./screens/NearbyScreen"
 import { SettingsScreen } from "./screens/SettingsScreen"
 import type {
+  Aviso,
   Chat,
   FuenteUbicacion,
   Message,
@@ -71,6 +75,10 @@ export default function App() {
   // Mensajes de cada chat, indexados por el identificador del chat.
   const [messages, setMessages] = useState<Record<string, Message[]>>({})
   const [tiempoRealConectado, setTiempoRealConectado] = useState(false)
+  // Avisos de nuevos chats cercanos pendientes de mostrar (RF-06).
+  const [avisos, setAvisos] = useState<Aviso[]>([])
+  // Cambia con cada aviso para volver a cargar la lista de chats.
+  const [ultimoAviso, setUltimoAviso] = useState(0)
   // Último envío fallido: si se repite el mismo texto, se reutiliza su
   // identificador para que el servidor no lo duplique (RNF-06).
   const pendiente = useRef<{ chatId: string, texto: string, idCliente: string } | null>(null)
@@ -111,6 +119,7 @@ export default function App() {
     setChats([])
     setParticipants([])
     setMessages({})
+    setAvisos([])
     setNotice("")
   }, [])
 
@@ -148,15 +157,36 @@ export default function App() {
     }
   }, [])
 
-  // Mientras hay sesión, se mantiene abierta la conexión de mensajes en tiempo real.
+  /** Abre el chat de un aviso y lo quita de la lista de pendientes. */
+  const abrirAviso = useCallback((aviso: Aviso) => {
+    setAvisos((actuales) => actuales.filter((a) => a.chatId !== aviso.chatId))
+    setActiveChat(chatDesdeAviso(aviso))
+    setParticipants([])
+    setChatError("")
+    setScreen("chat")
+  }, [])
+
+  // Mientras hay sesión, se mantiene abierta la conexión de mensajes y avisos en tiempo real.
   useEffect(() => {
     if (!token) return
-    return conectarTiempoReal(
-      token,
-      (mensaje) => incorporarMensajes(mensaje.chatId, [mensaje]),
-      setTiempoRealConectado,
-    )
-  }, [token, incorporarMensajes])
+    return conectarTiempoReal(token, {
+      alRecibirMensaje: (mensaje) => incorporarMensajes(mensaje.chatId, [mensaje]),
+      alRecibirAviso: (recibido) => {
+        const aviso = aAviso(recibido)
+        // RN-08: un aviso por chat; si llegara repetido, se ignora.
+        setAvisos((actuales) =>
+          actuales.some((a) => a.chatId === aviso.chatId) ? actuales : [...actuales, aviso],
+        )
+        setUltimoAviso(Date.now())
+        notificarEnSistema(aviso, () => abrirAviso(aviso))
+      },
+      alCambiarEstado: setTiempoRealConectado,
+    })
+  }, [token, incorporarMensajes, abrirAviso])
+
+  // Los avisos de chats ya caducados se descartan.
+  const ahora = Date.now()
+  const avisosVigentes = avisos.filter((aviso) => aviso.expiresAt > ahora)
 
   // ------------------------------------------------------------ Lista de chats
 
@@ -192,13 +222,14 @@ export default function App() {
     }
   }, [asegurarUbicacion])
 
-  // Mientras se ve la lista, se carga al entrar, al cambiar de ubicación y cada 20 s.
+  // Mientras se ve la lista, se carga al entrar, al cambiar de ubicación, al recibir
+  // un aviso y cada 20 s.
   useEffect(() => {
     if (!token || screen !== "nearby") return
     void cargarChats()
     const id = window.setInterval(() => void cargarChats(), INTERVALO_REFRESCO)
     return () => window.clearInterval(id)
-  }, [token, screen, fuente, cargarChats])
+  }, [token, screen, fuente, cargarChats, ultimoAviso])
 
   // ------------------------------------------------------------- Chat abierto
 
@@ -248,6 +279,7 @@ export default function App() {
   }
 
   function openChat(chat: Chat) {
+    setAvisos((actuales) => actuales.filter((a) => a.chatId !== chat.id))
     setActiveChat(chat)
     setParticipants([])
     setChatError("")
@@ -334,6 +366,12 @@ export default function App() {
     }
   }
 
+  /** Guarda en el servidor el alias o la preferencia de avisos (RF-15). */
+  async function cambiarPerfil(cambios: { alias?: string, avisosActivados?: boolean }) {
+    if (!token) return
+    setUser(await actualizarPerfil(token, cambios))
+  }
+
   function cambiarFuente(next: FuenteUbicacion) {
     guardarFuente(next)
     setFuente(next)
@@ -359,6 +397,17 @@ export default function App() {
       selectorOpen={selectorOpen}
       onSelectorToggle={() => setSelectorOpen((open) => !open)}
     >
+      {avisosVigentes.length > 0 && (
+        <AvisoToast
+          aviso={avisosVigentes[0]}
+          pendientes={avisosVigentes.length - 1}
+          onVer={() => abrirAviso(avisosVigentes[0])}
+          onCerrar={() => {
+            const cerrado = avisosVigentes[0]
+            setAvisos((actuales) => actuales.filter((a) => a.chatId !== cerrado.chatId))
+          }}
+        />
+      )}
       {screen === "nearby" && (
         <NearbyScreen
           chats={chats}
@@ -401,7 +450,7 @@ export default function App() {
       {screen === "settings" && (
         <SettingsScreen
           user={user}
-          onAliasChange={(alias) => setUser({ ...user, alias })}
+          onProfileChange={cambiarPerfil}
           onLogout={logout}
         />
       )}

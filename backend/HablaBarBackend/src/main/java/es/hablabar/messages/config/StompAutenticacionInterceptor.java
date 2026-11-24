@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>CONNECT: exige un token válido en la cabecera Authorization y asocia el
  *       usuario a la conexión.</li>
- *   <li>SUBSCRIBE: solo se permite la suscripción a los mensajes propios
- *       (/user/queue/mensajes) y con un usuario autenticado.</li>
+ *   <li>SUBSCRIBE: solo se permite la suscripción a los destinos propios
+ *       (/user/queue/mensajes y /user/queue/avisos) y con un usuario autenticado.</li>
  *   <li>SEND: se rechaza, porque los mensajes se envían mediante la API REST, que
  *       aplica todas las validaciones.</li>
  * </ul>
@@ -44,8 +44,10 @@ public class StompAutenticacionInterceptor implements ChannelInterceptor {
         switch (accessor.getCommand()) {
             case CONNECT, STOMP -> accessor.setUser(autenticar(accessor.getFirstNativeHeader("Authorization")));
             case SUBSCRIBE -> {
+                String destino = accessor.getDestination();
                 if (accessor.getUser() == null
-                        || !WebSocketConfig.SUSCRIPCION_MENSAJES.equals(accessor.getDestination())) {
+                        || destino == null
+                        || !WebSocketConfig.SUSCRIPCIONES_PERMITIDAS.contains(destino)) {
                     throw new MessageDeliveryException("Suscripción no permitida");
                 }
             }

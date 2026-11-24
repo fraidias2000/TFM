@@ -62,7 +62,7 @@ class StompAutenticacionInterceptorTest {
     }
 
     @Test
-    @DisplayName("CP-MSG-14: solo se permite suscribirse a los mensajes propios y no se aceptan SEND")
+    @DisplayName("CP-MSG-14: solo se permite suscribirse a los mensajes y avisos propios y no se aceptan SEND")
     void suscripcionesYEnvios() {
         Principal usuario = () -> USUARIO;
 
@@ -70,6 +70,11 @@ class StompAutenticacionInterceptorTest {
         propia.setUser(usuario);
         propia.setDestination("/user/queue/mensajes");
         assertThat(interceptor.preSend(mensaje(propia), null)).isNotNull();
+
+        StompHeaderAccessor avisos = accessor(StompCommand.SUBSCRIBE);
+        avisos.setUser(usuario);
+        avisos.setDestination("/user/queue/avisos");
+        assertThat(interceptor.preSend(mensaje(avisos), null)).isNotNull();
 
         StompHeaderAccessor ajena = accessor(StompCommand.SUBSCRIBE);
         ajena.setUser(usuario);
