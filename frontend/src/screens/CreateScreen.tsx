@@ -1,28 +1,31 @@
 import { useState, type FormEvent } from "react"
 import { Icon } from "../components/Icon"
-import type { LocationSnapshot } from "../types"
-import { validateLocation } from "../services/proximity"
+import type { EstadoUbicacion } from "../types"
 
 interface Props {
-  location: LocationSnapshot
+  ubicacion: EstadoUbicacion
+  busy: boolean
+  error?: string
   onCreate: (title: string, topic: string) => void
   onCancel: () => void
   onRefresh: () => void
 }
 
 export function CreateScreen({
-  location,
+  ubicacion,
+  busy,
+  error,
   onCreate,
   onCancel,
   onRefresh,
 }: Props) {
   const [title, setTitle] = useState("")
   const [topic, setTopic] = useState("Plan espontáneo")
-  const locationError = validateLocation(location)
+  const sinUbicacion = ubicacion.estado === "error"
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!locationError) onCreate(title.trim(), topic)
+    if (!sinUbicacion && !busy) onCreate(title.trim(), topic)
   }
 
   return (
@@ -65,28 +68,40 @@ export function CreateScreen({
         </fieldset>
 
         <section
-          className={`creation-location ${locationError ? "has-error" : ""}`}
+          className={`creation-location ${sinUbicacion ? "has-error" : ""}`}
         >
           <span>
             <Icon name="map" />
           </span>
           <div>
             <strong>
-              {locationError
+              {sinUbicacion
                 ? "Actualiza tu ubicación"
-                : "Ubicación de creación lista"}
+                : ubicacion.estado === "buscando"
+                  ? "Obteniendo ubicación…"
+                  : "Ubicación de creación lista"}
             </strong>
             <p>
-              {locationError ||
-                `Reciente y con precisión de ±${location.accuracy} m. No mostraremos coordenadas.`}
+              {sinUbicacion
+                ? ubicacion.mensaje
+                : ubicacion.estado === "lista"
+                  ? `Reciente y con precisión de ±${ubicacion.precision} m. No mostraremos coordenadas.`
+                  : "Se usará tu ubicación actual como punto fijo del chat."}
             </p>
           </div>
-          {locationError && (
+          {sinUbicacion && (
             <button type="button" onClick={onRefresh}>
               Actualizar
             </button>
           )}
         </section>
+
+        {error && (
+          <div className="inline-alert" role="alert">
+            <Icon name="signal" size={19} />
+            <span>{error}</span>
+          </div>
+        )}
 
         <div className="rules-card">
           <h2>Antes de crear</h2>
@@ -105,10 +120,10 @@ export function CreateScreen({
 
         <button
           className="primary-button"
-          disabled={Boolean(locationError)}
+          disabled={sinUbicacion || busy}
           type="submit"
         >
-          Crear chat <Icon name="plus" />
+          {busy ? "Creando…" : "Crear chat"} <Icon name="plus" />
         </button>
       </form>
     </div>

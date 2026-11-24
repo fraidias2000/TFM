@@ -1,16 +1,17 @@
 import type { ReactNode } from "react"
-import type { Scenario, Screen } from "../types"
+import { SIMULACION_DISPONIBLE } from "../services/ubicacion"
+import type { FuenteUbicacion, Screen } from "../types"
 import { Icon, type IconName } from "./Icon"
-import { ScenarioSelector } from "./ScenarioSelector"
+import { LocationSelector } from "./LocationSelector"
 
 interface Props {
   children: ReactNode
   active: Screen
   onNavigate: (screen: Screen) => void
-  scenario: Scenario
-  onScenarioChange: (scenario: Scenario) => void
-  scenarioOpen: boolean
-  onScenarioToggle: () => void
+  fuente: FuenteUbicacion
+  onFuenteChange: (fuente: FuenteUbicacion) => void
+  selectorOpen: boolean
+  onSelectorToggle: () => void
 }
 
 const navItems: { id: Screen, label: string, icon: IconName }[] = [
@@ -23,10 +24,10 @@ export function AppShell({
   children,
   active,
   onNavigate,
-  scenario,
-  onScenarioChange,
-  scenarioOpen,
-  onScenarioToggle,
+  fuente,
+  onFuenteChange,
+  selectorOpen,
+  onSelectorToggle,
 }: Props) {
   return (
     <div className="app-frame">
@@ -66,12 +67,14 @@ export function AppShell({
             </span>
             <span>HablaBar</span>
           </div>
-          <ScenarioSelector
-            value={scenario}
-            onChange={onScenarioChange}
-            open={scenarioOpen}
-            onToggle={onScenarioToggle}
-          />
+          {SIMULACION_DISPONIBLE && (
+            <LocationSelector
+              value={fuente}
+              onChange={onFuenteChange}
+              open={selectorOpen}
+              onToggle={onSelectorToggle}
+            />
+          )}
         </header>
         <div className="screen-content">{children}</div>
         {active !== "chat" && (

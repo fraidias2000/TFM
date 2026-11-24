@@ -1,20 +1,23 @@
 package es.hablabar.location.service;
 
+import org.springframework.stereotype.Service;
+
 /**
  * Cálculo de distancias sobre la superficie terrestre con la fórmula del semiverseno
  * (haversine). Para distancias de cientos de metros el error es despreciable frente
  * a la imprecisión propia de la geolocalización.
+ *
+ * <p>Es un servicio de Spring para poder inyectarlo en los módulos que comprueban
+ * la proximidad (chats y, más adelante, avisos).
  */
-public final class DistanciaService {
+@Service
+public class DistanciaService {
 
     /** Radio medio de la Tierra en metros. */
     private static final double RADIO_TIERRA_METROS = 6_371_008.8;
 
-    private DistanciaService() {
-    }
-
     /** Distancia en metros entre dos puntos expresados en grados decimales. */
-    public static double metros(double latitud1, double longitud1, double latitud2, double longitud2) {
+    public double metros(double latitud1, double longitud1, double latitud2, double longitud2) {
         double lat1 = Math.toRadians(latitud1);
         double lat2 = Math.toRadians(latitud2);
         double deltaLat = Math.toRadians(latitud2 - latitud1);

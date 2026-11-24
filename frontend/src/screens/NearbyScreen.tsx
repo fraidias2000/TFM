@@ -1,12 +1,13 @@
 import { Icon } from "../components/Icon"
-import type { Chat, LocationSnapshot, Scenario } from "../types"
-import { minutesRemaining, validateLocation } from "../services/proximity"
+import { useAhora } from "../hooks/useAhora"
+import { minutesRemaining } from "../services/proximity"
+import type { Chat, EstadoUbicacion } from "../types"
 
 interface Props {
   chats: Chat[]
   alias: string
-  location: LocationSnapshot
-  scenario: Scenario
+  ubicacion: EstadoUbicacion
+  loading: boolean
   notice?: string
   onOpen: (chat: Chat) => void
   onCreate: () => void
@@ -16,14 +17,16 @@ interface Props {
 export function NearbyScreen({
   chats,
   alias,
-  location,
-  scenario,
+  ubicacion,
+  loading,
   notice,
   onOpen,
   onCreate,
   onRefresh,
 }: Props) {
-  const locationError = validateLocation(location)
+  const ahora = useAhora()
+  const sinUbicacion = ubicacion.estado === "error"
+  const cercanos = chats.filter((chat) => !chat.joined).length
 
   return (
     <div className="page nearby-page">
@@ -36,18 +39,24 @@ export function NearbyScreen({
         <div className="profile-avatar">{alias.slice(0, 1).toUpperCase()}</div>
       </section>
 
-      <section className={`location-card ${locationError ? "has-error" : ""}`}>
+      <section className={`location-card ${sinUbicacion ? "has-error" : ""}`}>
         <span className="location-icon">
-          <Icon name={locationError ? "signal" : "map"} />
+          <Icon name={sinUbicacion ? "signal" : "map"} />
         </span>
         <div className="location-copy">
           <strong>
-            {locationError ? "Ubicación no disponible" : "Ubicación lista"}
+            {ubicacion.estado === "lista"
+              ? "Ubicación lista"
+              : ubicacion.estado === "buscando"
+                ? "Obteniendo ubicación…"
+                : "Ubicación no disponible"}
           </strong>
           <span>
-            {locationError
-              ? "Se necesita una señal reciente y precisa."
-              : `Actualizada ahora · Precisión ±${location.accuracy} m`}
+            {ubicacion.estado === "lista"
+              ? `Actualizada · Precisión ±${ubicacion.precision} m`
+              : ubicacion.estado === "buscando"
+                ? "Se necesita una señal reciente y precisa."
+                : "Actualízala para descubrir y crear chats."}
           </span>
         </div>
         <button onClick={onRefresh} aria-label="Actualizar ubicación">
@@ -55,10 +64,10 @@ export function NearbyScreen({
         </button>
       </section>
 
-      {(locationError || notice) && (
+      {(ubicacion.mensaje || notice) && (
         <div className="inline-alert" role="status">
           <Icon name="signal" size={19} />
-          <span>{locationError || notice}</span>
+          <span>{ubicacion.mensaje || notice}</span>
         </div>
       )}
 
@@ -66,83 +75,85 @@ export function NearbyScreen({
         <div>
           <h2>Chats cercanos</h2>
           <span>
-            {locationError
-              ? "Actualiza para descubrir"
-              : `${chats.length} activos en tu zona`}
+            {loading
+              ? "Buscando…"
+              : sinUbicacion
+                ? "Actualiza la ubicación para descubrir"
+                : `${cercanos} disponibles en tu zona`}
           </span>
         </div>
-        <button className="text-button" onClick={onRefresh}>
+        <button className="text-button" onClick={onRefresh} disabled={loading}>
           Actualizar
         </button>
       </div>
 
       <div className="chat-list">
-        {!locationError &&
-          chats.map((chat, index) => {
-            const distance = ["50m", "99m", "100m", "120m"].includes(scenario)
-              ? location.distance
-              : chat.distance
-            const participants =
-              scenario === "full" && index === 0 ? 20 : chat.participantCount
-            const remaining =
-              scenario === "expired" && index === 0
-                ? 0
-                : minutesRemaining(chat.expiresAt)
-            return (
-              <button
-                className="chat-card"
-                key={chat.id}
-                onClick={() => onOpen(chat)}
-              >
-                <div className={`chat-accent accent-${index + 1}`}>
-                  <Icon
-                    name={
-                      index === 1
-                        ? "compass"
-                        : index === 2
-                          ? "spark"
-                          : "message"
-                    }
-                    size={24}
-                  />
-                </div>
-                <div className="chat-card-main">
-                  <div className="chat-title-line">
-                    <div>
-                      <span className="topic">{chat.topic}</span>
-                      <h3>{chat.title}</h3>
-                    </div>
-                    <Icon name="chevron" size={19} />
-                  </div>
-                  <div className="chat-meta">
-                    <span className={distance >= 100 ? "danger" : ""}>
-                      <Icon name="map" size={15} /> {distance} m
+        {chats.map((chat, index) => {
+          const remaining = minutesRemaining(chat.expiresAt, ahora)
+          return (
+            <button
+              className="chat-card"
+              key={chat.id}
+              onClick={() => onOpen(chat)}
+            >
+              <div className={`chat-accent accent-${(index % 3) + 1}`}>
+                <Icon
+                  name={index % 3 === 1 ? "compass" : index % 3 === 2 ? "spark" : "message"}
+                  size={24}
+                />
+              </div>
+              <div className="chat-card-main">
+                <div className="chat-title-line">
+                  <div>
+                    <span className="topic">
+                      {chat.joined ? "Participando" : chat.topic ?? "Chat cercano"}
                     </span>
+                    <h3>{chat.title}</h3>
+                  </div>
+                  <Icon name="chevron" size={19} />
+                </div>
+                <div className="chat-meta">
+                  {chat.distanceBand !== undefined && (
                     <span>
-                      <Icon name="users" size={15} /> {participants}/20
+                      <Icon name="map" size={15} /> &lt; {chat.distanceBand} m
                     </span>
-                    <span className={remaining === 0 ? "danger" : ""}>
-                      <Icon name="clock" size={15} />{" "}
-                      {remaining === 0 ? "Caducado" : `${remaining} min`}
-                    </span>
-                  </div>
+                  )}
+                  <span>
+                    <Icon name="users" size={15} /> {chat.participantCount}/
+                    {chat.capacity}
+                  </span>
+                  <span className={remaining === 0 ? "danger" : ""}>
+                    <Icon name="clock" size={15} />{" "}
+                    {remaining === 0 ? "Caducado" : `${remaining} min`}
+                  </span>
                 </div>
-              </button>
-            )
-          })}
-        {locationError && (
+              </div>
+            </button>
+          )
+        })}
+
+        {!loading && chats.length === 0 && (
           <div className="empty-state">
             <span>
               <Icon name="compass" size={27} />
             </span>
-            <h3>Necesitamos una ubicación válida</h3>
-            <p>
-              Actualízala para mostrar chats cercanos sin revelar tus
-              coordenadas.
-            </p>
-            <button className="secondary-button" onClick={onRefresh}>
-              Actualizar ubicación
-            </button>
+            {sinUbicacion ? (
+              <>
+                <h3>Necesitamos una ubicación válida</h3>
+                <p>
+                  Actualízala para mostrar chats cercanos sin revelar tus
+                  coordenadas.
+                </p>
+                <button className="secondary-button" onClick={onRefresh}>
+                  Actualizar ubicación
+                </button>
+              </>
+            ) : (
+              <>
+                <h3>No hay chats cerca</h3>
+                <p>Crea el primero y avisaremos a quien esté a menos de 100 m.</p>
+              </>
+            )}
           </div>
         )}
       </div>

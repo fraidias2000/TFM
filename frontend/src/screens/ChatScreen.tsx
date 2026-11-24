@@ -1,48 +1,59 @@
-import { useMemo, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Icon } from "../components/Icon"
-import type { Chat, LocationSnapshot, Scenario } from "../types"
-import {
-  canEnterChat,
-  formatTime,
-  minutesRemaining,
-} from "../services/proximity"
+import { useAhora } from "../hooks/useAhora"
+import { formatTime, minutesRemaining } from "../services/proximity"
+import type { Chat, Message, Participant } from "../types"
 
 interface Props {
   chat: Chat
-  scenario: Scenario
-  location: LocationSnapshot
+  participants: Participant[]
+  messages: Message[]
   alias: string
+  busy: boolean
+  /** Si la conexión de mensajes en tiempo real está abierta. */
+  connected: boolean
+  error?: string
   onBack: () => void
   onJoin: () => void
   onLeave: () => void
-  onSend: (text: string) => void
+  /** Envía el mensaje; devuelve true si el servidor lo ha aceptado. */
+  onSend: (text: string) => Promise<boolean>
 }
 
 export function ChatScreen({
   chat,
-  scenario,
-  location,
+  participants,
+  messages,
   alias,
+  busy,
+  connected,
+  error,
   onBack,
   onJoin,
   onLeave,
   onSend,
 }: Props) {
   const [draft, setDraft] = useState("")
-  const effectiveExpired =
-    scenario === "expired" || Date.now() >= chat.expiresAt
-  const entryError = useMemo(
-    () => canEnterChat(chat, location, scenario),
-    [chat, location, scenario],
-  )
-  const participantCount = scenario === "full" ? 20 : chat.participantCount
+  const [sending, setSending] = useState(false)
+  const finalLista = useRef<HTMLDivElement>(null)
+  const ahora = useAhora(10_000)
+  // El tiempo restante se calcula con la caducidad fijada por el servidor (RF-10).
+  const expired = ahora >= chat.expiresAt
 
-  function submit(event: FormEvent) {
+  // Muestra siempre el último mensaje.
+  useEffect(() => {
+    finalLista.current?.scrollIntoView({ block: "end" })
+  }, [messages.length])
+
+  async function submit(event: FormEvent) {
     event.preventDefault()
-    const value = draft.trim()
-    if (!value || effectiveExpired) return
-    onSend(value)
-    setDraft("")
+    if (!draft.trim() || expired || sending) return
+    setSending(true)
+    // El texto se envía tal como se ha escrito; el borrador solo se vacía si el
+    // servidor confirma el mensaje, para poder reintentarlo si falla.
+    const ok = await onSend(draft)
+    setSending(false)
+    if (ok) setDraft("")
   }
 
   return (
@@ -54,14 +65,12 @@ export function ChatScreen({
         <div>
           <h1>{chat.title}</h1>
           <span>
-            <i className={effectiveExpired ? "status-expired" : ""} />{" "}
-            {effectiveExpired
-              ? "Caducado"
-              : `${participantCount} participantes`}
+            <i className={expired ? "status-expired" : ""} />{" "}
+            {expired ? "Caducado" : `${chat.participantCount} participantes`}
           </span>
         </div>
-        {chat.joined ? (
-          <button className="leave-link" onClick={onLeave}>
+        {chat.joined && !expired ? (
+          <button className="leave-link" onClick={onLeave} disabled={busy}>
             Salir
           </button>
         ) : (
@@ -72,16 +81,16 @@ export function ChatScreen({
       <div className="chat-status-bar">
         <span>
           <Icon name="clock" size={16} />{" "}
-          {effectiveExpired
+          {expired
             ? "El chat ha terminado"
-            : `Caduca en ${minutesRemaining(chat.expiresAt)} min`}
+            : `Caduca en ${minutesRemaining(chat.expiresAt, ahora)} min`}
         </span>
         <span>
-          <Icon name="users" size={16} /> {participantCount}/20
+          <Icon name="users" size={16} /> {chat.participantCount}/{chat.capacity}
         </span>
       </div>
 
-      {!chat.joined && !effectiveExpired && (
+      {!chat.joined && !expired && (
         <section className="join-gate">
           <span className="join-icon">
             <Icon name="message" size={30} />
@@ -92,25 +101,22 @@ export function ChatScreen({
             Usarás el alias <strong>{alias}</strong>. Tu ubicación exacta no se
             compartirá.
           </p>
-          <div className={`distance-check ${entryError ? "has-error" : ""}`}>
-            <Icon name={entryError ? "close" : "check"} />
+          <div className={`distance-check ${error ? "has-error" : ""}`}>
+            <Icon name={error ? "close" : "check"} />
             <div>
               <strong>
-                {entryError
-                  ? "No puedes entrar ahora"
-                  : "Estás dentro del radio"}
+                {error ? "No puedes entrar ahora" : "Comprobaremos tu distancia"}
               </strong>
               <span>
-                {entryError || `${location.distance} m · ubicación válida`}
+                {error ??
+                  (chat.distanceBand !== undefined
+                    ? `Estás a menos de ${chat.distanceBand} m del chat`
+                    : "Debes estar a menos de 100 m del punto de creación")}
               </span>
             </div>
           </div>
-          <button
-            className="primary-button"
-            onClick={onJoin}
-            disabled={Boolean(entryError)}
-          >
-            Entrar al chat
+          <button className="primary-button" onClick={onJoin} disabled={busy}>
+            {busy ? "Entrando…" : "Entrar al chat"}
           </button>
           <small>
             Salir no te expulsará por distancia, pero tendrás que volver a
@@ -119,7 +125,7 @@ export function ChatScreen({
         </section>
       )}
 
-      {effectiveExpired ? (
+      {expired ? (
         <section className="expired-state">
           <span>
             <Icon name="clock" size={29} />
@@ -142,7 +148,21 @@ export function ChatScreen({
             <div className="system-message">
               Te has unido como {alias}. Solo se muestra tu alias.
             </div>
-            {chat.messages.map((message) => (
+            {!connected && (
+              <div className="system-message">
+                Sin conexión en tiempo real. Reconectando… Los mensajes se
+                recuperarán automáticamente.
+              </div>
+            )}
+            {participants.length > 0 && (
+              <div className="system-message">
+                Participantes:{" "}
+                {participants
+                  .map((p) => (p.isCreator ? `${p.alias} (creador)` : p.alias))
+                  .join(", ")}
+              </div>
+            )}
+            {messages.map((message) => (
               <article
                 className={`message-row ${message.own ? "own" : ""}`}
                 key={message.id}
@@ -159,6 +179,8 @@ export function ChatScreen({
                 </div>
               </article>
             ))}
+            {error && <div className="system-message">{error}</div>}
+            <div ref={finalLista} />
           </div>
           <form className="composer" onSubmit={submit}>
             <div>
@@ -174,7 +196,10 @@ export function ChatScreen({
               />
               {draft.length > 850 && <small>{draft.length}/1000</small>}
             </div>
-            <button disabled={!draft.trim()} aria-label="Enviar mensaje">
+            <button
+              disabled={!draft.trim() || sending}
+              aria-label="Enviar mensaje"
+            >
               <Icon name="send" size={20} />
             </button>
           </form>

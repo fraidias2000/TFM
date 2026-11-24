@@ -1,13 +1,5 @@
 export type Screen = "nearby" | "create" | "chat" | "settings"
 
-export type Scenario = "50m" | "99m" | "100m" | "120m" | "invalid" | "full" | "expired"
-
-export interface LocationSnapshot {
-  distance: number
-  accuracy: number
-  updatedAt: number
-}
-
 export interface Message {
   id: string
   author: string
@@ -16,18 +8,26 @@ export interface Message {
   own?: boolean
 }
 
+/** Chat tal como lo usa la interfaz, construido a partir de las respuestas del backend. */
 export interface Chat {
   id: string
   title: string
-  topic: string
-  createdAt: number
+  topic: string | null
+  /** Fecha de caducidad fijada por el servidor (milisegundos). */
   expiresAt: number
-  distance: number
   participantCount: number
-  participants: string[]
-  messages: Message[]
-  joined?: boolean
-  createdByMe?: boolean
+  capacity: number
+  /** Tramo de distancia (menos de 25, 50 o 100 m). Solo en los chats cercanos. */
+  distanceBand?: number
+  joined: boolean
+  createdByMe: boolean
+}
+
+/** Participante visible dentro de un chat: solo su alias (RF-09). */
+export interface Participant {
+  id: string
+  alias: string
+  isCreator: boolean
 }
 
 export interface User {
@@ -37,7 +37,18 @@ export interface User {
   avisosActivados: boolean
 }
 
-export interface AppNotice {
-  type: "success" | "error" | "info"
-  message: string
+/** Origen de la ubicación: el GPS real o una posición simulada para las pruebas. */
+export type FuenteUbicacion =
+  | "gps"
+  | "sim-origen"
+  | "sim-33m"
+  | "sim-80m"
+  | "sim-120m"
+  | "sim-imprecisa"
+
+/** Estado de la última ubicación enviada al servidor. */
+export interface EstadoUbicacion {
+  estado: "buscando" | "lista" | "error"
+  precision?: number
+  mensaje?: string
 }

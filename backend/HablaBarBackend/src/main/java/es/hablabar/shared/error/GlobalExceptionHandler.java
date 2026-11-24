@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * Traduce las excepciones a respuestas ErrorResponse, sin exponer detalles internos.
@@ -45,5 +46,12 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> integridad(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("CONFLICTO", "La operación entra en conflicto con datos existentes"));
+    }
+
+    /** Parámetro de la ruta con formato incorrecto (por ejemplo, un identificador que no es un UUID). */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ErrorResponse> parametroNoValido(MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of("PARAMETRO_NO_VALIDO", "El parámetro '" + ex.getName() + "' no es válido"));
     }
 }

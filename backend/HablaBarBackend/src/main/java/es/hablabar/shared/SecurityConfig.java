@@ -27,6 +27,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/health").permitAll()
+                        // Conexión WebSocket de los mensajes en tiempo real. El navegador no
+                        // puede enviar la cabecera Authorization al abrirla, así que el token
+                        // se comprueba en el mensaje CONNECT (StompAutenticacionInterceptor).
+                        .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/registro",
                                 "/api/v1/auth/login").permitAll()

@@ -6,6 +6,9 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Collection;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Punto de entrada público del módulo users. Los demás módulos (auth, chats...)
@@ -33,6 +36,16 @@ public class UsuarioService {
     @Transactional(readOnly = true)
     public Optional<Usuario> buscarPorId(UUID id) {
         return usuarioRepository.findById(id);
+    }
+
+       /**
+     * Alias de varios usuarios a la vez, indexados por su identificador.
+     * Lo usa el módulo de chats para mostrar quién participa sin exponer el correo (RN-10).
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> aliasPorId(Collection<UUID> ids) {
+        return usuarioRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Usuario::getId, Usuario::getAlias));
     }
 
     /**
